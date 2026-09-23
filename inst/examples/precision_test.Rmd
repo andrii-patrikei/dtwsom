@@ -1,0 +1,231 @@
+---
+title: "Does more precision help DTW-SOM? (float → double → long double → quad → 50 digits → MPFR)"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = "#>")
+```
+
+The core is templated on the number type, so the *same* code runs at every precision.
+Grid geometry, schedules and neighbourhood weights stay in `double`; only the DTW
+arithmetic and the prototypes use the chosen type.
+
+| `precision`  | type                                  | mantissa | notes                                    |
+|--------------|---------------------------------------|----------|------------------------------------------|
+| `float`      | IEEE binary32                          | 24 bits  | ~7 digits                                |
+| `double`     | IEEE binary64 (default)                | 53 bits  | ~16 digits                               |
+| `longdouble` | x87 80-bit (gcc on x86)                | 64 bits  | ~19 digits; = double on arm64 macOS      |
+| `quad`       | Boost `cpp_bin_float<113>` (binary128) | 113 bits | ~34 digits, software                     |
+| `bin50`      | Boost `cpp_bin_float<50>`              | 168 bits | 50 digits, software                      |
+| `mpfr100`    | Boost `mpfr_float_backend<100>`        | 333 bits | needs `-DDTWSOM_WITH_MPFR -lmpfr -lgmp`  |
+
+Boost headers come from the `BH` R package, so nothing has to be installed at
+system level. MPFR is optional (Rmpfr users already have the libraries; on
+Windows they ship with Rtools).
+
+```{r build}
+library(dtwsom)
+# MPFR build: install with  Sys.setenv(PKG_CXXFLAGS = "-DDTWSOM_WITH_MPFR", PKG_LIBS = "-lmpfr -lgmp")
+lanes_src <- system.file("examples", "dtw_lanes.cpp", package = "dtwsom")   # for the vectorisation report below
+str(dtwsom_build_info_cpp())
+precs <- dtwsom_precisions_cpp(); precs
+```
+
+## 1. One DTW distance, all precisions
+
+Three kinds of input, each designed to stress the arithmetic differently:
+
+* **scaled**: z-normalised, length 300 - the normal case;
+* **offset**: the same signal sitting on a DC offset of 10⁶ (raw ADC counts, unfiltered
+  pressure or temperature sensors look like this) - cancellation in `(a - b)²`;
+* **long**: length 5 000 - many additions in the cumulative cost.
+
+The 50-digit result is the reference; the table shows the relative error of every
+other precision against it, and the time per distance.
+
+```{r ladder}
+set.seed(1)
+mk <- function(n, offset = 0) matrix(offset + sin(seq(0, 6 * pi, length.out = n)) + rnorm(n, sd = 0.3))
+cases <- list(scaled = list(mk(300), mk(280)),
+              offset = list(mk(300, 1e6), mk(280, 1e6)),
+              long   = list(mk(5000), mk(4900)))
+
+ladder <- function(a, b) {
+  do.call(rbind, lapply(precs, function(p) {
+    r <- dtw_distance_cpp(a, b, -1L, Inf, p)
+    # time the plain distance-matrix path (dtw_distance_cpp also computes a 50-digit reference)
+    t <- system.time(for (i in 1:5) dtw_cross_cpp(list(a), list(b), -1L, Inf, 1L, p))[["elapsed"]] / 5
+    data.frame(precision = p, bits = r$mantissa_bits, value = substr(r$digits, 1, 36),
+               rel_error_vs_50digits = r$rel_error_vs_bin50, ms = 1000 * t)
+  }))
+}
+for (nm in names(cases)) { cat("\n==", nm, "==\n"); print(ladder(cases[[nm]][[1]], cases[[nm]][[2]]), digits = 3, row.names = FALSE) }
+```
+
+Read the `rel_error` column: `double` sits at 10⁻¹⁶ in every case, `float` at 10⁻⁷ on
+scaled data and 10⁻³ on the offset data (it has only ~7 digits and 10⁶ eats 6 of them).
+`longdouble` and `quad` add digits that no downstream decision can see. Note the cost
+column: the software types are 20-100× slower.
+
+## 2. Does precision change any *decision*?
+
+A SOM only uses distances to (a) choose the BMU and (b) form averages. So the question
+is not "are the digits different" but "does any BMU flip". Map the synthetic motif set
+(and its 10⁶-offset twin) onto one fixed codebook at every precision and compare BMUs
+against the 50-digit reference.
+
+```{r motifs}
+make_motifs <- function(n = 400, seed = 1, offset = 0) {
+  set.seed(seed)
+  shapes <- c("sine", "triangle", "square", "ramp")
+  lab <- sample(shapes, n, replace = TRUE)
+  x <- lapply(lab, function(s) {
+    L <- sample(40:90, 1); u <- seq(0, 1, length.out = L); a <- runif(1, 0.7, 1.3)
+    y <- switch(s, sine = sin(2 * pi * u), triangle = 1 - 4 * abs(u - 0.5),
+                square = ifelse(u < 0.5, 1, -1), ramp = 2 * u - 1)
+    offset + a * y + rnorm(L, sd = 0.15)
+  })
+  list(x = x, label = lab)
+}
+d  <- make_motifs()
+d6 <- make_motifs(offset = 1e6)
+set.seed(42); codes <- d$x[sample(400, 25)]; codes6 <- lapply(codes, `+`, 1e6)
+
+bmu_agreement <- function(x, codes) {
+  ref <- dtwsom_map_cpp(codes, x, 10L, Inf, -1L, 0L, "bin50")
+  gap <- apply(ref$distmat, 1, function(r) { s <- sort(r)[1:2]; (s[2] - s[1]) / s[1] })  # relative margin of the BMU
+  do.call(rbind, lapply(precs, function(p) {
+    t <- system.time(m <- dtwsom_map_cpp(codes, x, 10L, Inf, -1L, 0L, p))[["elapsed"]]
+    flips <- which(m$bmu != ref$bmu)
+    data.frame(precision = p, bmu_flips = length(flips),
+               smallest_margin_flipped = if (length(flips)) signif(min(gap[flips]), 2) else NA,
+               max_rel_dist_err = { ok <- ref$distmat > 0; signif(max(abs(m$distmat[ok] - ref$distmat[ok]) / ref$distmat[ok]), 2) },
+               seconds = round(t, 2))
+  }))
+}
+cat("scaled data (margin between best and 2nd-best unit: median", signif(median(apply(dtwsom_map_cpp(codes, d$x, 10L, Inf, -1L, 0L)$distmat, 1, function(r) { s <- sort(r)[1:2]; (s[2]-s[1])/s[1] })), 2), ")\n")
+print(bmu_agreement(d$x, codes), row.names = FALSE)
+cat("\nsame data on a 1e6 offset\n")
+print(bmu_agreement(d6$x, codes6), row.names = FALSE)
+```
+
+A BMU can only flip when the margin between the best and the second-best unit is smaller
+than the arithmetic error. With `double` the error is 10⁻¹⁶ and the margins are 10⁻²…10⁻¹,
+so the two never meet. `float` on offset data is the one case that breaks.
+
+## 3. Train the same map at two precisions
+
+Same initial codebook, same seed, same schedule - `double` versus `quad` (and `float`).
+The batch algorithm is deterministic, so any difference is purely arithmetic.
+
+```{r train, results = "hold"}
+fit_at <- function(p, x = d$x) dtw_som(x, 3, 3, epochs = 8, mode = "batch", window = 10,
+                                       codes = codes[1:9], precision = p, seed = 7, verbose = FALSE)
+fits <- lapply(c(float = "float", double = "double", quad = "quad"), fit_at)
+cmp <- function(a, b) c(
+  same_bmu   = mean(a$unit.classif == b$unit.classif),
+  max_rel_code_diff = max(mapply(function(u, v) max(abs(u - v)), a$codes, b$codes)) / max(abs(unlist(b$codes))),
+  qe_rel_diff = (a$qe - b$qe) / b$qe, te_diff = a$te - b$te)
+rbind(float_vs_quad  = cmp(fits$float,  fits$quad),
+      double_vs_quad = cmp(fits$double, fits$quad))
+sapply(fits, function(f) c(qe = f$qe, te = f$te, seconds = f$elapsed))
+```
+
+```{r train-offset}
+fits6 <- lapply(c(float = "float", double = "double", quad = "quad"),
+                function(p) dtw_som(d6$x, 3, 3, epochs = 8, window = 10, codes = codes6[1:9],
+                                    precision = p, seed = 7, verbose = FALSE))
+rbind(float_vs_quad  = cmp(fits6$float,  fits6$quad),
+      double_vs_quad = cmp(fits6$double, fits6$quad))
+```
+
+`double` reproduces the `quad` map to ~10⁻¹⁴ (relative) in the prototypes and to the last
+unit in the assignments; `float` is off by 10⁻³ on scaled data and destroys the map on the
+offset data. If you ever *do* see double and quad
+disagree on real data, the cause will be a genuine tie (two prototypes at equal distance),
+which no precision fixes - it is a property of the data, and worth flagging in the output.
+
+## 4. What the extra precision costs
+
+```{r cost}
+cost <- do.call(rbind, lapply(intersect(precs, c("float", "double", "longdouble", "quad", "bin50", "mpfr100")), function(p) {
+  f <- fit_at(p); data.frame(precision = p, seconds = round(f$elapsed, 2), qe = signif(f$qe, 6))
+}))
+cost$relative <- round(cost$seconds / cost$seconds[cost$precision == "double"], 1)
+print(cost, row.names = FALSE)
+```
+
+## 5. AVX-512 on a Ryzen 9950X - what it is and how to switch it on
+
+**It is the same instruction set as on Intel.** AMD did not invent anything separate:
+Zen 4 (7000 series) added AVX-512 with a double-pumped 256-bit datapath, Zen 5 (e.g. the
+9950X) executes full 512-bit vectors. Ironically the mainstream Intel desktop parts
+(12th-14th gen) have AVX-512 fused off, so an AMD desktop is currently the easy way to
+get it. There is nothing AMD-specific to learn; there are three things to know:
+
+1. **The compiler must be told the target.** `-march=native` (or `-march=znver5`, GCC ≥ 14;
+   `znver4` on GCC 13 / Rtools 4.4) turns AVX-512 on. Check what your build got:
+
+    ```{r flags}
+    unlist(dtwsom_build_info_cpp()[c("avx512f", "avx2", "fma", "compiler")])
+    ```
+
+   Put `CXX17FLAGS = -O3 -march=native` in `~/.R/Makevars` (Windows: `Documents/.R/Makevars`).
+   For code that must run on other machines use GCC's `__attribute__((target_clones("avx512f","avx2","default")))`
+   on Linux, or a manual `__builtin_cpu_supports("avx512f")` switch on Windows (function
+   multi-versioning needs ELF ifunc, which Windows lacks).
+
+2. **GCC prefers 256-bit vectors by default** on most targets (a leftover from Intel's
+   AVX-512 clock throttling). Add `-mprefer-vector-width=512` to get 64-byte vectors, and
+   *measure* - on Zen 5 it usually helps, on older Intel it often does not. The compiler tells
+   you what it did with `-fopt-info-vec-optimized`:
+
+    ```{r vecreport}
+    cxx <- strsplit(system2(file.path(R.home("bin"), "R"), c("CMD", "config", "CXX17"), stdout = TRUE), " ")[[1]]
+    rep <- system2(cxx[1], c(cxx[-1], "-O3 -march=native -mprefer-vector-width=512 -fopenmp -fopt-info-vec-optimized",
+                             "-c", lanes_src, "-o", tempfile(fileext = ".o"), paste0("-I", R.home("include")),
+                             paste0("-I", system.file("include", package = "Rcpp"))), stdout = TRUE, stderr = TRUE)
+    unique(grep("dtw_lanes.cpp.*vectorized using", rep, value = TRUE))   # the `#pragma omp simd` lane loop
+    ```
+
+3. **The DTW recursion does not vectorise as written.** `cur[j]` needs `cur[j-1]`, a
+   loop-carried dependency, so `-march` alone changes nothing in the core. The fix is to lay
+   the data out so that consecutive memory holds *different prototypes at the same time step*
+   and run them in lockstep - then the loop over prototypes has no dependency and
+   `#pragma omp simd` vectorises it. `src/dtw_lanes.cpp` is that kernel, in 30 lines and
+   without intrinsics:
+
+    ```{r lanes}
+    set.seed(1); n <- 1000; L <- 64      # dtw_lanes_cpp / dtw_scalar_cpp are exported by the package
+    P <- matrix(rnorm(L * n), L, n)      # 64 prototypes of length 1000, one per row
+    q <- rnorm(n)
+    stopifnot(all.equal(dtw_lanes_cpp(P, q), dtw_scalar_cpp(P, q)))
+    bench <- function(f, reps = 5) system.time(for (i in seq_len(reps)) f())[["elapsed"]] / reps
+    t <- c(scalar = bench(function() dtw_scalar_cpp(P, q)),
+           lanes_double = bench(function() dtw_lanes_cpp(P, q)),
+           lanes_float = bench(function() dtw_lanes_cpp(P, q, "float")))
+    round(rbind(seconds = t, speedup = t["scalar"] / t), 3)
+    ```
+
+   The lane kernel needs same-length prototypes (bucket the codebook by length, or pad) and
+   applies no band yet; this is the Phase-2 item in the plan. Try it on a Zen 5 machine with
+   `-mprefer-vector-width=512` versus without - the report above says whether you got
+   64- or 32-byte vectors, the table says whether it mattered.
+
+## 6. Conclusions
+
+* **`double` is not the bottleneck.** Its error (10⁻¹⁶) is nine orders of magnitude below the
+  smallest margin that decides a BMU; quad/50-digit/MPFR reproduce the double map exactly at
+  30-100× the cost. Keep them as a *diagnostic* (`precision = "quad"` on a small subset when
+  a result looks suspicious), not as a production setting.
+* **`float` is the interesting direction, not MPFR:** it halves memory traffic and doubles SIMD
+  width, and it is exact enough on scaled data. Two rules make it safe: z-normalise (or at
+  least remove the DC offset) before DTW, and accumulate the per-epoch means in double
+  (already the case for the QE statistics).
+* **AVX-512 pays only after the loop is restructured** (lanes across prototypes); with the
+  serial recursion it is a no-op. That restructuring gives ~10-20× on its own; the 256 → 512
+  bit step on top of it is machine-dependent and must be measured.

@@ -1,4 +1,4 @@
-# dtwsom — Self-Organizing Maps for variable-length time series (DTW, Rcpp, OpenMP)
+# dtwsom: Self-Organizing Maps for variable-length time series (DTW, Rcpp, OpenMP)
 
 A self-organizing map whose prototypes are time series of *arbitrary length*. Series are matched
 with dynamic time warping and prototypes are adapted along the optimal warping path, following
@@ -7,13 +7,13 @@ Silva & Henriques (2020), *Exploring time-series motifs through DTW-SOM* ([arXiv
 What this implementation adds to the paper:
 
 * a deterministic **batch mode** (neighbourhood-weighted DBA barycenters) that parallelises over
-  the series with OpenMP — the paper's online algorithm is also available (`mode = "online"`);
+  the series with OpenMP; the paper's online algorithm is also available (`mode = "online"`);
 * Sakoe-Chiba bands, `max_step`, early abandoning with the paper's per-epoch `max_dist` trick and a
-  running best bound — pruning is exact (bit-identical results with `prune = FALSE`);
+  running best bound, and pruning is exact (bit-identical results with `prune = FALSE`);
 * multivariate series (dependent DTW), optional prototype smoothing (`smooth = 3`), z-normalisation;
 * the number type is chosen at run time: `precision = "float" | "double" | "longdouble" | "quad" | "bin50" | "mpfr100"`
   (Boost.Multiprecision via the `BH` package; MPFR optional);
-* quantization/topographic error, U-matrix, hit maps, prototype–member overlays, an "elastic" layout,
+* quantization/topographic error, U-matrix, hit maps, prototype-member overlays, an "elastic" layout,
   and `as_kohonen()` so [`aweSOM`](https://cran.r-project.org/package=aweSOM) can evaluate and plot the map.
 
 With `window = 0` on fixed-length data the algorithm reduces exactly to a batch Euclidean SOM and
@@ -58,11 +58,11 @@ Same initial codebook and radius schedule, five initialisations each (`inst/exam
 | data | kohonen purity | DTW-SOM purity |
 |---|---|---|
 | synthetic motifs, smooth *global* time-stretch, resampled to 64 | 0.987 | 1.000 |
-| Cylinder-Bell-Funnel — *local* onset/duration misalignment | 0.871 | 0.981 |
+| Cylinder-Bell-Funnel, *local* onset/duration misalignment | 0.871 | 0.981 |
 
 Resampling to a common length already removes a global stretch, so the classical SOM does as well there
-(and has the smoother map). DTW pays off when instances of one class differ in onset and local tempo —
-the situation repeated movements in sensor data are in.
+(and has the smoother map). DTW pays off when instances of one class differ in onset and local tempo,
+which is the situation repeated movements in sensor data are in.
 
 ## Contents
 
