@@ -1,0 +1,20 @@
+# build artefacts
+src/*.o
+src/*.so
+src/*.dll
+src/*.dylib
+build/
+*.tar.gz
+*.Rcheck/
+# outputs of the example scripts
+aweSOM_plots/
+data/
+inst/doc/
+# R / RStudio session files
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.Rproj
+.DS_Store
+Thumbs.db

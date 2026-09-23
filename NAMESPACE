@@ -1,0 +1,16 @@
+useDynLib(dtwsom, .registration = TRUE)
+importFrom(Rcpp, evalCpp)
+importFrom(graphics, plot, lines, points, text, title, mtext, par, box, polygon, rect, segments)
+importFrom(grDevices, adjustcolor, hcl.colors)
+importFrom(stats, dist, quantile, sd, approx, median, predict)
+
+export(dtw_som, dtw_pairwise, dtw_warp, umatrix, elastic_layout, as_kohonen,
+       plot_members, plot_members_kohonen, anchor_init, make_grid,
+       as_seq_list, normalize_seqs, flatten_seqs)
+export(dtw_distance_cpp, dtw_cross_cpp, dtw_pairwise_cpp, dtwsom_map_cpp, dtwsom_train_cpp,
+       dtw_lanes_cpp, dtw_scalar_cpp, dtw_warp_cpp,
+       dtwsom_threads_cpp, dtwsom_precisions_cpp, dtwsom_build_info_cpp)
+
+S3method(print, dtwsom)
+S3method(plot, dtwsom)
+S3method(predict, dtwsom)

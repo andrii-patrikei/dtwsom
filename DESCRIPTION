@@ -1,0 +1,24 @@
+Package: dtwsom
+Type: Package
+Title: Self-Organizing Maps for Variable-Length Time Series with Dynamic Time Warping
+Version: 0.1.0
+Authors@R: person("Andrii", "Patrikei", email = "andriipatrikei@gmail.com",
+                  role = c("aut", "cre"), comment = c(ORCID = "0000-0003-2015-4843"))
+Description: Self-organizing maps whose prototypes are time series of arbitrary
+    length, matched with dynamic time warping (DTW) and adapted along the optimal
+    warping path, after Silva & Henriques (2020) <doi:10.1109/IJCNN48605.2020.9207614>.
+    Adds a deterministic batch (DBA-style) training mode parallelised with OpenMP,
+    Sakoe-Chiba bands with early abandoning, multivariate series, prototype smoothing,
+    a run-time choice of floating-point precision (float to 100-digit MPFR via Boost),
+    quality measures, plots, and an adapter to the 'kohonen' object so 'aweSOM' can
+    evaluate and plot the maps.
+License: GPL (>= 3)
+Encoding: UTF-8
+URL: https://github.com/andrii-patrikei/dtwsom
+BugReports: https://github.com/andrii-patrikei/dtwsom/issues
+Imports: Rcpp (>= 1.0.0), graphics, grDevices, stats
+LinkingTo: Rcpp, BH
+Suggests: kohonen, aweSOM, MASS, knitr, rmarkdown
+SystemRequirements: C++17, OpenMP
+NeedsCompilation: yes
+Roxygen: list(markdown = TRUE)

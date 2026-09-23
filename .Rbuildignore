@@ -1,0 +1,8 @@
+^cpp_tests$
+^images$
+^docs$
+^\.github$
+^LICENSE\.md$
+^\.gitignore$
+^.*\.Rproj$
+^\.Rproj\.user$
