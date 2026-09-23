@@ -159,17 +159,17 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_dtwsom_dtw_lanes_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtw_lanes_cpp, 3},
-    {"_dtwsom_dtw_scalar_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtw_scalar_cpp, 2},
-    {"_dtwsom_dtwsom_train_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtwsom_train_cpp, 5},
-    {"_dtwsom_dtwsom_map_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtwsom_map_cpp, 7},
-    {"_dtwsom_dtw_cross_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtw_cross_cpp, 6},
-    {"_dtwsom_dtw_pairwise_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtw_pairwise_cpp, 5},
-    {"_dtwsom_dtw_distance_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtw_distance_cpp, 5},
-    {"_dtwsom_dtw_warp_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtw_warp_cpp, 4},
-    {"_dtwsom_dtwsom_threads_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtwsom_threads_cpp, 0},
-    {"_dtwsom_dtwsom_precisions_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtwsom_precisions_cpp, 0},
-    {"_dtwsom_dtwsom_build_info_cpp", (DL_FUNC) (RCPP_FUNC) &_dtwsom_dtwsom_build_info_cpp, 0},
+    {"_dtwsom_dtw_lanes_cpp", (DL_FUNC) &_dtwsom_dtw_lanes_cpp, 3},
+    {"_dtwsom_dtw_scalar_cpp", (DL_FUNC) &_dtwsom_dtw_scalar_cpp, 2},
+    {"_dtwsom_dtwsom_train_cpp", (DL_FUNC) &_dtwsom_dtwsom_train_cpp, 5},
+    {"_dtwsom_dtwsom_map_cpp", (DL_FUNC) &_dtwsom_dtwsom_map_cpp, 7},
+    {"_dtwsom_dtw_cross_cpp", (DL_FUNC) &_dtwsom_dtw_cross_cpp, 6},
+    {"_dtwsom_dtw_pairwise_cpp", (DL_FUNC) &_dtwsom_dtw_pairwise_cpp, 5},
+    {"_dtwsom_dtw_distance_cpp", (DL_FUNC) &_dtwsom_dtw_distance_cpp, 5},
+    {"_dtwsom_dtw_warp_cpp", (DL_FUNC) &_dtwsom_dtw_warp_cpp, 4},
+    {"_dtwsom_dtwsom_threads_cpp", (DL_FUNC) &_dtwsom_dtwsom_threads_cpp, 0},
+    {"_dtwsom_dtwsom_precisions_cpp", (DL_FUNC) &_dtwsom_dtwsom_precisions_cpp, 0},
+    {"_dtwsom_dtwsom_build_info_cpp", (DL_FUNC) &_dtwsom_dtwsom_build_info_cpp, 0},
     {NULL, NULL, 0}
 };
 
